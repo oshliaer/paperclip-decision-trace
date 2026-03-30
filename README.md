@@ -11,20 +11,16 @@ pnpm dev:ui         # local dev server with hot-reload events
 pnpm test
 ```
 
-This scaffold snapshots `@paperclipai/plugin-sdk` and `@paperclipai/shared` from a local Paperclip checkout at:
-
-`/home/user/data/oshliaer/paperclip/packages/plugins/sdk`
-
+This scaffold snapshots `@paperclipai/plugin-sdk` and `@paperclipai/shared` from a local Paperclip checkout.
 The packed tarballs live in `.paperclip-sdk/` for local development. Before publishing this plugin, switch those dependencies to published package versions once they are available on npm.
-
-
 
 ## Install Into Paperclip
 
 ```bash
-curl -X POST http://127.0.0.1:3100/api/plugins/install \
+PLUGIN_DIR=$(pwd)
+curl -X POST "${PAPERCLIP_API_URL:-http://127.0.0.1:3100}/api/plugins/install" \
   -H "Content-Type: application/json" \
-  -d '{"packageName":"/home/user/data/oshliaer/paperclip-decision-trace/paperclip-decision-trace","isLocalPath":true}'
+  -d "{\"packageName\":\"$PLUGIN_DIR\",\"isLocalPath\":true}"
 ```
 
 ## Build Options
