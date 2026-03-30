@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "private": true,
-  "description": "A Paperclip plugin",
+  "description": "Paperclip plugin that visualises the issue/task decision tree for any issue in your company",
   "scripts": {
     "build": "node ./esbuild.config.mjs",
     "build:rollup": "rollup -c",
@@ -22,7 +22,7 @@
     "plugin",
     "connector"
   ],
-  "author": "Plugin Author",
+  "author": "oshliaer",
   "license": "MIT",
   "pnpm": {
     "overrides": {

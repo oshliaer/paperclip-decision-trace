@@ -1,4 +1,4 @@
-import { definePlugin, runWorker } from "@paperclipai/plugin-sdk";
+import { definePlugin, startWorkerRpcHost } from "@paperclipai/plugin-sdk";
 import type { Issue, Agent } from "@paperclipai/plugin-sdk/types";
 
 export interface IssueNodeData {
@@ -111,4 +111,4 @@ const plugin = definePlugin({
 });
 
 export default plugin;
-runWorker(plugin, import.meta.url);
+startWorkerRpcHost({ plugin });
