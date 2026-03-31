@@ -46,46 +46,58 @@ const STATUS_STYLES: Record<string, { bg: string; border: string; text: string; 
 };
 
 // ---------------------------------------------------------------------------
-// SVG tree layout
+// SVG vertical indent tree layout
+//
+// Children are stacked VERTICALLY with a horizontal indent per depth level.
+// This keeps the diagram in a fixed-width column regardless of sibling count,
+// solving the horizontal sprawl problem for issues with many children.
+//
+// Structure:
+//   [Root]
+//     ├── [Child A]
+//     │     └── [Child A.1]
+//     ├── [Child B]
+//     └── [Child C]
 // ---------------------------------------------------------------------------
 
-const NODE_W = 192;
-const NODE_H = 76;
-const H_GAP = 20;
-const V_GAP = 60;
+const NODE_W = 200;
+const NODE_H = 72;
+const V_GAP = 12;   // vertical gap between sibling nodes
+const INDENT = 32;  // horizontal indent per depth level
+const CONNECTOR_X_OFFSET = 16; // x offset from parent left edge for the vertical stem
 
 interface LayoutNode {
   node: IssueNodeData;
+  depth: number;
   x: number;
   y: number;
   children: LayoutNode[];
 }
 
-function computeSubtreeWidth(node: IssueNodeData): number {
-  if (node.children.length === 0) return NODE_W + H_GAP;
-  return Math.max(
-    NODE_W + H_GAP,
-    node.children.reduce((sum, c) => sum + computeSubtreeWidth(c), 0),
-  );
-}
-
-function layoutNode(node: IssueNodeData, x: number, y: number): LayoutNode {
-  if (node.children.length === 0) {
-    return { node, x, y, children: [] };
-  }
-
-  const childWidths = node.children.map((c) => computeSubtreeWidth(c));
-  const totalChildWidth = childWidths.reduce((s, w) => s + w, 0);
-  let childX = x + NODE_W / 2 - totalChildWidth / 2;
+/**
+ * Lay out the tree vertically. Each node is placed at (depth * INDENT, currentY).
+ * Returns the layout and the next available Y position.
+ */
+function layoutNodeVertical(
+  node: IssueNodeData,
+  depth: number,
+  currentY: number,
+): { layout: LayoutNode; nextY: number } {
+  const x = depth * INDENT;
+  const y = currentY;
+  let nextY = currentY + NODE_H + V_GAP;
 
   const childLayouts: LayoutNode[] = [];
-  for (let i = 0; i < node.children.length; i++) {
-    const w = childWidths[i];
-    childLayouts.push(layoutNode(node.children[i], childX + w / 2 - NODE_W / 2, y + NODE_H + V_GAP));
-    childX += w;
+  for (const child of node.children) {
+    const result = layoutNodeVertical(child, depth + 1, nextY);
+    childLayouts.push(result.layout);
+    nextY = result.nextY;
   }
 
-  return { node, x, y, children: childLayouts };
+  return {
+    layout: { node, depth, x, y, children: childLayouts },
+    nextY,
+  };
 }
 
 function collectNodes(layout: LayoutNode, result: LayoutNode[] = []): LayoutNode[] {
@@ -94,19 +106,32 @@ function collectNodes(layout: LayoutNode, result: LayoutNode[] = []): LayoutNode
   return result;
 }
 
-function collectEdges(
-  layout: LayoutNode,
-  result: Array<{ x1: number; y1: number; x2: number; y2: number }> = [],
-) {
-  for (const child of layout.children) {
-    result.push({
-      x1: layout.x + NODE_W / 2,
-      y1: layout.y + NODE_H,
-      x2: child.x + NODE_W / 2,
-      y2: child.y,
-    });
-    collectEdges(child, result);
-  }
+interface Edge {
+  // Vertical stem from parent bottom-left to last child level
+  stemX: number;
+  stemY1: number;
+  stemY2: number;
+  // Horizontal elbow from stem to each child
+  elbows: Array<{ y: number; toX: number }>;
+}
+
+function collectEdges(layout: LayoutNode, result: Edge[] = []): Edge[] {
+  if (layout.children.length === 0) return result;
+
+  const stemX = layout.x + CONNECTOR_X_OFFSET;
+  const stemY1 = layout.y + NODE_H;
+  // Stem runs to the vertical center of the last child
+  const lastChild = layout.children[layout.children.length - 1];
+  const stemY2 = lastChild.y + NODE_H / 2;
+
+  const elbows = layout.children.map((child) => ({
+    y: child.y + NODE_H / 2,
+    toX: child.x,
+  }));
+
+  result.push({ stemX, stemY1, stemY2, elbows });
+
+  for (const child of layout.children) collectEdges(child, result);
   return result;
 }
 
@@ -128,43 +153,44 @@ function IssueCard({ layout, targetId }: { layout: LayoutNode; targetId: string 
   const { node } = layout;
   const s = STATUS_STYLES[node.status] ?? STATUS_STYLES.todo;
   const isTarget = node.id === targetId;
-  const titleClipped = node.title.length > 24 ? node.title.slice(0, 24) + "…" : node.title;
+  const titleClipped = node.title.length > 28 ? node.title.slice(0, 28) + "…" : node.title;
   const agentName = node.assigneeAgentName ?? null;
   const agentClipped = agentName
-    ? agentName.length > 24
-      ? agentName.slice(0, 24) + "…"
+    ? agentName.length > 28
+      ? agentName.slice(0, 28) + "…"
       : agentName
     : null;
 
   return (
     <g transform={`translate(${layout.x}, ${layout.y})`}>
       {/* Shadow */}
-      <rect x={2} y={2} width={NODE_W} height={NODE_H} rx={8} fill="#0000001a" />
+      <rect x={2} y={2} width={NODE_W} height={NODE_H} rx={6} fill="#0000001a" />
       {/* Background */}
       <rect
         width={NODE_W}
         height={NODE_H}
-        rx={8}
+        rx={6}
         fill={s.bg}
         stroke={s.border}
         strokeWidth={isTarget ? 3 : 1.5}
       />
-      {/* Status badge */}
-      <rect x={8} y={8} width={NODE_W - 16} height={18} rx={4} fill={s.border} />
-      <text x={NODE_W / 2} y={21} textAnchor="middle" fill="white" fontSize={10} fontWeight={700}>
-        {s.label.toUpperCase()}
-      </text>
-      {/* Identifier */}
-      <text x={8} y={42} fill={s.text} fontSize={11} fontWeight={700}>
+      {/* Left accent bar */}
+      <rect x={0} y={0} width={4} height={NODE_H} rx={3} fill={s.border} />
+      {/* Identifier + status inline */}
+      <text x={12} y={20} fill={s.text} fontSize={11} fontWeight={700}>
         {node.identifier}
       </text>
+      <rect x={NODE_W - 72} y={8} width={64} height={16} rx={4} fill={s.border} />
+      <text x={NODE_W - 40} y={20} textAnchor="middle" fill="white" fontSize={9} fontWeight={700}>
+        {s.label.toUpperCase()}
+      </text>
       {/* Title */}
-      <text x={8} y={57} fill="#374151" fontSize={11}>
+      <text x={12} y={40} fill="#374151" fontSize={12}>
         {titleClipped}
       </text>
       {/* Assignee */}
       {agentClipped && (
-        <text x={8} y={70} fill="#6b7280" fontSize={10}>
+        <text x={12} y={58} fill="#6b7280" fontSize={10}>
           ↳ {agentClipped}
         </text>
       )}
@@ -173,16 +199,16 @@ function IssueCard({ layout, targetId }: { layout: LayoutNode; targetId: string 
 }
 
 // ---------------------------------------------------------------------------
-// Tree SVG
+// Tree SVG (vertical indent layout)
 // ---------------------------------------------------------------------------
 
 function IssueTreeSVG({ tree, targetId }: { tree: IssueNodeData; targetId: string }) {
-  const rootLayout = layoutNode(tree, 0, 0);
+  const { layout: rootLayout } = layoutNodeVertical(tree, 0, 0);
   const allNodes = collectNodes(rootLayout);
   const edges = collectEdges(rootLayout);
   const bounds = getBounds(allNodes);
 
-  const PAD = 32;
+  const PAD = 16;
   const svgWidth = bounds.maxX - bounds.minX + PAD * 2;
   const svgHeight = bounds.maxY - bounds.minY + PAD * 2;
   const offsetX = -bounds.minX + PAD;
@@ -196,16 +222,31 @@ function IssueTreeSVG({ tree, targetId }: { tree: IssueNodeData; targetId: strin
       viewBox={`0 0 ${svgWidth} ${svgHeight}`}
     >
       <g transform={`translate(${offsetX}, ${offsetY})`}>
-        {/* Edges */}
+        {/* Connector lines */}
         {edges.map((e, i) => (
-          <path
-            key={i}
-            d={`M ${e.x1} ${e.y1} C ${e.x1} ${(e.y1 + e.y2) / 2}, ${e.x2} ${(e.y1 + e.y2) / 2}, ${e.x2} ${e.y2}`}
-            fill="none"
-            stroke="#d1d5db"
-            strokeWidth={2}
-            strokeDasharray="4 3"
-          />
+          <g key={i}>
+            {/* Vertical stem */}
+            <line
+              x1={e.stemX}
+              y1={e.stemY1}
+              x2={e.stemX}
+              y2={e.stemY2}
+              stroke="#d1d5db"
+              strokeWidth={1.5}
+            />
+            {/* Horizontal elbows to each child */}
+            {e.elbows.map((elbow, j) => (
+              <line
+                key={j}
+                x1={e.stemX}
+                y1={elbow.y}
+                x2={elbow.toX}
+                y2={elbow.y}
+                stroke="#d1d5db"
+                strokeWidth={1.5}
+              />
+            ))}
+          </g>
         ))}
         {/* Nodes */}
         {allNodes.map((layout) => (
