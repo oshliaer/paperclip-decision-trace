@@ -3,6 +3,8 @@
 A Paperclip plugin that visualises the issue/task decision tree for any issue in your company.
 Given any issue identifier, it walks up to the root of the hierarchy and builds a full tree view — useful for tracing how decisions propagate from goals down to individual tasks.
 
+![Decision Trace in action](./assets/screenshot_01.png)
+
 ## Features
 
 - **`getIssueTree` action** — returns the full issue hierarchy rooted at the top-level ancestor of a given issue, with agent assignment info
@@ -61,6 +63,16 @@ pnpm typecheck      # TypeScript check without emit
 SDK tarballs live in `.paperclip-sdk/` (gitignored) and are referenced via `pnpm.overrides` in `package.json`. This is intentional for local development. Before publishing the plugin, replace those `file:` references with published npm package versions once `@paperclipai/plugin-sdk` and `@paperclipai/shared` are available on the registry.
 
 ## Install into Paperclip
+
+### Via Paperclip UI
+
+1. Open your Paperclip company settings.
+2. Navigate to **Plugins** in the sidebar.
+3. Click **Install plugin**.
+4. Enter the npm package name `paperclip-decision-trace` and confirm.
+5. Once installed, the **Decision Trace** tab appears on every issue page.
+
+### Via API (local path)
 
 ```bash
 PLUGIN_DIR=$(pwd)
